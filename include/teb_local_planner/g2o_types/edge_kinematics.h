@@ -170,8 +170,10 @@ public:
  * The turning radius is defined by \f$ r=v/omega \f$.
  * 
  * The \e weight can be set using setInformation(): Matrix element 1,1: (Choose a very high value: ~1000). \n
- * The second equation enforces a minimum turning radius.
- * The \e weight can be set using setInformation(): Matrix element 2,2. \n
+ * A second equation penalizes backward motions and a third equation enforces
+ * a minimum turning radius.
+ * The corresponding \e weights can be set using setInformation(): Matrix
+ * elements 2,2 and 3,3. \n
  * The dimension of the error / cost vector is 3: the first component represents the nonholonomic constraint cost, 
  * the second one backward-drive cost and the third one the minimum turning radius
  * @see TebOptimalPlanner::AddEdgesKinematics, EdgeKinematicsDiffDrive
@@ -179,7 +181,7 @@ public:
  *          the user might add an extra margin to the min_turning_radius param.
  * @remarks Do not forget to call setTebConfig()
  */    
-class EdgeKinematicsCarlike : public BaseTebBinaryEdge<2, double, VertexPose, VertexPose>
+class EdgeKinematicsCarlike : public BaseTebBinaryEdge<3, double, VertexPose, VertexPose>
 {
 public:
   
@@ -205,17 +207,25 @@ public:
     // non holonomic constraint
     _error[0] = fabs( ( cos(conf1->theta())+cos(conf2->theta()) ) * deltaS[1] - ( sin(conf1->theta())+sin(conf2->theta()) ) * deltaS[0] );
 
+    // positive-drive-direction constraint. Keep this separate from the
+    // turning-radius constraint so carlike robots honor
+    // weight_kinematics_forward_drive just like differential-drive robots.
+    Eigen::Vector2d angle_vec ( cos(conf1->theta()), sin(conf1->theta()) );
+    _error[1] = penaltyBoundFromBelow(deltaS.dot(angle_vec), 0, 0);
+
     // limit minimum turning radius
     double angle_diff = g2o::normalize_theta( conf2->theta() - conf1->theta() );
     if (angle_diff == 0)
-      _error[1] = 0; // straight line motion
+      _error[2] = 0; // straight line motion
     else if (cfg_->trajectory.exact_arc_length) // use exact computation of the radius
-      _error[1] = penaltyBoundFromBelow(fabs(deltaS.norm()/(2*sin(angle_diff/2))), cfg_->robot.min_turning_radius, 0.0);
+      _error[2] = penaltyBoundFromBelow(fabs(deltaS.norm()/(2*sin(angle_diff/2))), cfg_->robot.min_turning_radius, 0.0);
     else
-      _error[1] = penaltyBoundFromBelow(deltaS.norm() / fabs(angle_diff), cfg_->robot.min_turning_radius, 0.0); 
+      _error[2] = penaltyBoundFromBelow(deltaS.norm() / fabs(angle_diff), cfg_->robot.min_turning_radius, 0.0);
     // This edge is not affected by the epsilon parameter, the user might add an exra margin to the min_turning_radius parameter.
     
-    ROS_ASSERT_MSG(std::isfinite(_error[0]) && std::isfinite(_error[1]), "EdgeKinematicsCarlike::computeError() _error[0]=%f _error[1]=%f\n",_error[0],_error[1]);
+    ROS_ASSERT_MSG(std::isfinite(_error[0]) && std::isfinite(_error[1]) && std::isfinite(_error[2]),
+                   "EdgeKinematicsCarlike::computeError() _error[0]=%f _error[1]=%f _error[2]=%f\n",
+                   _error[0], _error[1], _error[2]);
   }
   
 public:

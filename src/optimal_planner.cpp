@@ -943,14 +943,17 @@ void TebOptimalPlanner::AddEdgesKinematicsDiffDrive()
 
 void TebOptimalPlanner::AddEdgesKinematicsCarlike()
 {
-  if (cfg_->optim.weight_kinematics_nh==0 && cfg_->optim.weight_kinematics_turning_radius==0)
+  if (cfg_->optim.weight_kinematics_nh==0 &&
+      cfg_->optim.weight_kinematics_forward_drive==0 &&
+      cfg_->optim.weight_kinematics_turning_radius==0)
     return; // if weight equals zero skip adding edges!
 
   // create edge for satisfiying kinematic constraints
-  Eigen::Matrix<double,2,2> information_kinematics;
+  Eigen::Matrix<double,3,3> information_kinematics;
   information_kinematics.fill(0.0);
   information_kinematics(0, 0) = cfg_->optim.weight_kinematics_nh;
-  information_kinematics(1, 1) = cfg_->optim.weight_kinematics_turning_radius;
+  information_kinematics(1, 1) = cfg_->optim.weight_kinematics_forward_drive;
+  information_kinematics(2, 2) = cfg_->optim.weight_kinematics_turning_radius;
   
   for (int i=0; i < teb_.sizePoses()-1; i++) // ignore twiced start only
   {
