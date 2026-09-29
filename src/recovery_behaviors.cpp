@@ -41,10 +41,26 @@
 #include <limits>
 #include <functional>
 #include <numeric>
+#include <algorithm>
 #include <g2o/stuff/misc.h>
 
 namespace teb_local_planner
 {
+
+bool reduceHorizon(std::vector<geometry_msgs::PoseStamped>& local_plan,
+                   int& global_goal_idx, int global_plan_size, int failures)
+{
+    const int local_size = static_cast<int>(local_plan.size());
+    if (local_size <= 2 || global_goal_idx < local_size - 1 ||
+        global_goal_idx >= global_plan_size - 1)
+        return false;
+
+    const int segments = std::max(1, (local_size - 1) / (failures > 9 ? 4 : 2));
+    const int retained_size = segments + 1;
+    global_goal_idx -= local_size - retained_size;
+    local_plan.resize(retained_size);
+    return true;
+}
 
 // ============== FailureDetector Implementation ===================
 

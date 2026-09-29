@@ -937,32 +937,19 @@ void TebLocalPlannerROS::configureBackupModes(std::vector<geometry_msgs::PoseSta
     ros::Time current_time = ros::Time::now();
     
     // reduced horizon backup mode
-    if (cfg_.recovery.shrink_horizon_backup && 
-        goal_idx < (int)transformed_plan.size()-1 && // we do not reduce if the goal is already selected (because the orientation might change -> can introduce oscillations)
+    if (cfg_.recovery.shrink_horizon_backup &&
        (no_infeasible_plans_>0 || (current_time - time_last_infeasible_plan_).toSec() < cfg_.recovery.shrink_horizon_min_duration )) // keep short horizon for at least a few seconds
     {
-        ROS_INFO_COND(no_infeasible_plans_==1, "Activating reduced horizon backup mode for at least %.2f sec (infeasible trajectory detected).", cfg_.recovery.shrink_horizon_min_duration);
-
-
-        // Shorten horizon if requested
-        // reduce to 50 percent:
-        int horizon_reduction = goal_idx/2;
-        
-        if (no_infeasible_plans_ > 9)
+        if (reduceHorizon(transformed_plan, goal_idx,
+                          static_cast<int>(global_plan_.size()), no_infeasible_plans_))
         {
-            ROS_INFO_COND(no_infeasible_plans_==10, "Infeasible trajectory detected 10 times in a row: further reducing horizon...");
-            horizon_reduction /= 2;
+            ROS_INFO_COND(no_infeasible_plans_==1, "Activating reduced horizon backup mode for at least %.2f sec (infeasible trajectory detected).", cfg_.recovery.shrink_horizon_min_duration);
+            ROS_INFO_COND(no_infeasible_plans_==10, "Infeasible trajectory detected 10 times in a row: reducing local horizon to a quarter.");
+            // Points beyond the new endpoint would pull the optimized band
+            // back toward the very horizon that recovery just removed.
+            if (!custom_via_points_active_)
+                updateViaPointsContainer(transformed_plan, cfg_.trajectory.global_plan_viapoint_sep);
         }
-        
-        // we have a small overhead here, since we already transformed 50% more of the trajectory.
-        // But that's ok for now, since we do not need to make transformGlobalPlan more complex 
-        // and a reduced horizon should occur just rarely.
-        int new_goal_idx_transformed_plan = int(transformed_plan.size()) - horizon_reduction - 1;
-        goal_idx -= horizon_reduction;
-        if (new_goal_idx_transformed_plan>0 && goal_idx >= 0)
-            transformed_plan.erase(transformed_plan.begin()+new_goal_idx_transformed_plan, transformed_plan.end());
-        else
-            goal_idx += horizon_reduction; // this should not happen, but safety first ;-) 
     }
     
     
@@ -1206,5 +1193,3 @@ double TebLocalPlannerROS::getNumberFromXMLRPC(XmlRpc::XmlRpcValue& value, const
 }
 
 } // end namespace teb_local_planner
-
-

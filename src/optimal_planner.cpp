@@ -1153,8 +1153,31 @@ bool TebOptimalPlanner::getVelocityCommand(double& vx, double& vy, double& omega
   }
   look_ahead_poses = std::max(1, std::min(look_ahead_poses, teb_.sizePoses() - 1));
   double dt = 0.0;
+  int driving_direction = 0;
+  const bool carlike = cfg_->robot.max_vel_y == 0 && cfg_->robot.min_turning_radius > 0;
   for(int counter = 0; counter < look_ahead_poses; ++counter)
   {
+    if (carlike)
+    {
+      const PoseSE2& pose = teb_.Pose(counter);
+      const Eigen::Vector2d displacement = teb_.Pose(counter + 1).position() - pose.position();
+      const Eigen::Vector2d forward(std::cos(pose.theta()), std::sin(pose.theta()));
+      const double longitudinal = displacement.dot(forward);
+      const int direction = (longitudinal > 1e-6) - (longitudinal < -1e-6);
+      if (direction != 0)
+      {
+        // Averaging across a forward/reverse cusp can cancel displacement,
+        // reverse the first command and collapse its turning radius even
+        // when each planned segment is feasible. End the command horizon
+        // before the cusp, excluding the opposite segment's time as well.
+        if (driving_direction != 0 && direction != driving_direction)
+        {
+          look_ahead_poses = counter;
+          break;
+        }
+        driving_direction = direction;
+      }
+    }
     dt += teb_.TimeDiff(counter);
     if(dt >= cfg_->trajectory.dt_ref * look_ahead_poses)  // TODO: change to look-ahead time? Refine trajectory?
     {
@@ -1171,7 +1194,7 @@ bool TebOptimalPlanner::getVelocityCommand(double& vx, double& vy, double& omega
     return false;
   }
 	  
-  // Get velocity from the first two configurations
+  // Get velocity over the selected horizon within the current driving direction.
   extractVelocity(teb_.Pose(0), teb_.Pose(look_ahead_poses), dt, vx, vy, omega);
   return true;
 }

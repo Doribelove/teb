@@ -42,10 +42,20 @@
 
 #include <boost/circular_buffer.hpp>
 #include <geometry_msgs/Twist.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <vector>
 #include <ros/ros.h>
 
 namespace teb_local_planner
 {
+
+/** Shorten a local window while keeping its endpoint's global-plan index.
+ * The final global goal is never shortened (its orientation is authoritative).
+ * Retain half the local segments, or a quarter after repeated failures.
+ * Returns true only when the horizon actually changed.
+ */
+bool reduceHorizon(std::vector<geometry_msgs::PoseStamped>& local_plan,
+                   int& global_goal_idx, int global_plan_size, int failures);
 
 
 /**
